@@ -105,32 +105,29 @@ Faça isto na sua máquina Windows (o cliente não precisa de nada disso).
    pip install -r requirements-build.txt
    ```
 
-2. Gere o executável:
+2. **Token de auto-update — crie UMA única vez na raiz do projeto** (ao lado de
+   `semed.spec`). A partir daí, **todo build embute o token sozinho** — você não
+   copia nada a cada vez. Com o token copiado do GitHub (Parte 2.2):
+
+   ```powershell
+   Get-Clipboard | Set-Content -Path "update_token.txt" -NoNewline -Encoding utf8
+   ```
+
+   > O arquivo fica só local: o `.gitignore` o ignora e ele nunca vai ao GitHub.
+   > O `semed.spec` o detecta e embute em `_internal\update_token.txt`; o app
+   > procura o token lá automaticamente. (Sem token, o auto-update do
+   > repositório **privado** não baixa.) Alternativa: criar pelo Bloco de Notas
+   > (UTF-8, só o token). Evite `echo token > arquivo` (grava em UTF-16).
+
+3. Gere o executável:
 
    ```bash
    pyinstaller semed.spec --noconfirm
    ```
 
-   Resultado: `dist\SEMED Energia\SEMED Energia.exe` (com a pasta `_internal`).
-
-3. Coloque o token junto do executável (sem o token, o auto-update do repositório
-   **privado** não baixa). Com o token recém-copiado do GitHub (Parte 2.2),
-   leia-o do clipboard — assim ele não passa pelo terminal nem pelo histórico:
-
-   ```powershell
-   Get-Clipboard | Set-Content -Path "dist\SEMED Energia\update_token.txt" -NoNewline -Encoding utf8
-   ```
-
-   Confira sem exibir o token (esperado: `True / True / ~90+`):
-
-   ```powershell
-   $t = (Get-Content "dist\SEMED Energia\update_token.txt" -Raw).Trim()
-   "existe=$([bool]$t)  prefixo_ok=$($t.StartsWith('github_pat_'))  tamanho=$($t.Length)"
-   ```
-
-   > Alternativa: **Bloco de Notas** → salvar como `update_token.txt` (UTF-8), só o token.
-   > Evite `echo token > arquivo` (grava em UTF-16 e corrompe a leitura). O app
-   > tolera BOM (lê com `utf-8-sig`). O `.gitignore` já ignora `update_token.txt`.
+   Resultado: `dist\SEMED Energia\SEMED Energia.exe`. Confirme no log a linha
+   **`[semed.spec] update_token.txt embutido no pacote.`** (se aparecer
+   "pacote sem token", o `update_token.txt` não está na raiz).
 
 4. Gere o instalador — pela interface (abra **`installer\semed.iss`** e **Compile** / F9)
    **ou** por linha de comando:

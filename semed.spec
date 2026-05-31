@@ -56,6 +56,18 @@ datas = [
 # Dados de libs que carregam recursos em runtime.
 datas += collect_data_files("pdfminer")
 
+# Token de auto-update (opcional). Se existir 'update_token.txt' na raiz do
+# projeto, é embutido automaticamente no pacote (vai para _internal/), de modo
+# que NÃO é preciso copiá-lo para dist/ a cada build. Nunca é commitado
+# (está no .gitignore). O CI não tem esse arquivo, então as releases públicas
+# saem sem o token — o token do cliente vem do instalador e sobrevive aos updates.
+_token_src = os.path.join(SPECPATH, "update_token.txt")
+if os.path.exists(_token_src):
+    datas += [(_token_src, ".")]
+    print("[semed.spec] update_token.txt embutido no pacote.")
+else:
+    print("[semed.spec] update_token.txt nao encontrado na raiz — pacote sem token.")
+
 hiddenimports = [
     "version",
     "config",

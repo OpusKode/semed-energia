@@ -26,11 +26,24 @@ ASSET_NOME = "SEMED-Energia-windows.zip"
 EXE_NOME = "SEMED Energia.exe"
 
 
-def _app_dir() -> Path:
-    """Pasta do executável (instalado) ou do projeto (dev)."""
+def _candidatos_token() -> list[Path]:
+    """
+    Locais onde o token pode estar, em ordem de prioridade.
+
+    No app empacotado, o token é embutido pelo semed.spec em _internal
+    (sys._MEIPASS) — então não é preciso copiá-lo manualmente a cada build.
+    Também aceitamos o token solto ao lado do exe (compatibilidade) e, em
+    desenvolvimento, na raiz do projeto.
+    """
+    cands: list[Path] = []
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent
-    return Path(__file__).parent
+        cands.append(Path(sys.executable).parent / "update_token.txt")  # ao lado do exe
+        mp = getattr(sys, "_MEIPASS", None)
+        if mp:
+            cands.append(Path(mp) / "update_token.txt")                 # embutido (_internal)
+    else:
+        cands.append(Path(__file__).parent / "update_token.txt")        # raiz do projeto (dev)
+    return cands
 
 
 def obter_token() -> str | None:
@@ -38,11 +51,13 @@ def obter_token() -> str | None:
     env = os.getenv("SEMED_UPDATE_TOKEN")
     if env:
         return env.strip()
-    arq = _app_dir() / "update_token.txt"
-    if arq.exists():
+    for arq in _candidatos_token():
         try:
-            # utf-8-sig tolera um BOM (caso o arquivo seja salvo pelo Notepad).
-            return arq.read_text(encoding="utf-8-sig").strip() or None
+            if arq.exists():
+                # utf-8-sig tolera um BOM (caso seja salvo pelo Notepad).
+                tok = arq.read_text(encoding="utf-8-sig").strip()
+                if tok:
+                    return tok
         except Exception:
-            return None
+            continue
     return None
