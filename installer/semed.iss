@@ -40,8 +40,10 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Instala em Program Files -> requer elevação (padrão).
-PrivilegesRequired=admin
+; Instalação POR USUÁRIO (sem admin): vai para %LOCALAPPDATA%\Programs\SEMED Energia.
+; Essencial para o AUTO-UPDATE funcionar — a troca de arquivos roda sem elevação.
+; (Em Program Files exigiria admin a cada atualização, o que travava o update.)
+PrivilegesRequired=lowest
 SetupIconFile=..\ui\assets\icon.ico
 UninstallDisplayIcon={app}\{#AppExe}
 

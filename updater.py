@@ -183,6 +183,28 @@ def baixar(res: ResultadoUpdate, on_progress=None, cancelado=None) -> Path | Non
         return None
 
 
+# ─── Pré-checagem de permissão ──────────────────────────────
+def instalacao_gravavel() -> bool:
+    """
+    True se a pasta do app é gravável (instalação por-usuário) — condição para o
+    auto-update conseguir trocar os arquivos. False quando instalado em pasta
+    protegida (ex.: C:\\Program Files) sem elevação, onde a troca falharia e o
+    app entraria em loop de "baixa e não atualiza".
+
+    Em desenvolvimento (não-frozen) retorna True (irrelevante).
+    """
+    if not getattr(sys, "frozen", False):
+        return True
+    try:
+        app_dir = Path(sys.executable).parent
+        teste = app_dir / ".semed_update_write_test.tmp"
+        teste.write_text("x", encoding="ascii")
+        teste.unlink()
+        return True
+    except Exception:
+        return False
+
+
 # ─── Aplicação (somente quando empacotado) ──────────────────
 def aplicar_e_reiniciar(zip_path: Path) -> bool:
     """
@@ -205,18 +227,41 @@ def aplicar_e_reiniciar(zip_path: Path) -> bool:
         raiz = itens[0] if (len(itens) == 1 and itens[0].is_dir()) else staging
 
         bat = staging / "_aplicar_update.bat"
-        exe = app_dir / cfg.EXE_NOME
+        exe_nome = cfg.EXE_NOME
+        exe = app_dir / exe_nome
+        # O .bat:
+        #   1. ESPERA o app fechar de verdade (até ~60s) — evita o robocopy
+        #      falhar por arquivos travados (exe/_internal em uso).
+        #   2. robocopy /MOVE substitui a instalação pelos arquivos novos.
+        #   3. Reabre o app e se autodeleta.
+        # chcp 65001 + UTF-8 para suportar caminhos com acento (ex.: usuário
+        # do Windows com acento em %LOCALAPPDATA%).
         bat.write_text(
             "@echo off\r\n"
-            "timeout /t 2 /nobreak >nul\r\n"
-            f'robocopy "{raiz}" "{app_dir}" /E /MOVE /R:3 /W:1 /NFL /NDL /NJH /NJS >nul\r\n'
-            f'start "" "{exe}"\r\n'
+            "chcp 65001 >nul\r\n"
+            "setlocal enableextensions\r\n"
+            f'set "EXE={exe}"\r\n'
+            f'set "SRC={raiz}"\r\n'
+            f'set "DST={app_dir}"\r\n'
+            "set /a n=0\r\n"
+            ":wait\r\n"
+            f'tasklist /fi "imagename eq {exe_nome}" 2>nul | find /i "{exe_nome}" >nul\r\n'
+            "if errorlevel 1 goto docopy\r\n"
+            "set /a n+=1\r\n"
+            "if %n% geq 60 goto docopy\r\n"
+            "timeout /t 1 /nobreak >nul\r\n"
+            "goto wait\r\n"
+            ":docopy\r\n"
+            'robocopy "%SRC%" "%DST%" /E /MOVE /R:3 /W:2 /NFL /NDL /NJH /NJS >nul\r\n'
+            'start "" "%EXE%"\r\n'
             'del "%~f0"\r\n',
             encoding="utf-8",
         )
-        subprocess.Popen(["cmd", "/c", str(bat)],
-                         creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
-        log.info("Troca de arquivos agendada. Encerrando para atualizar.")
+        # CREATE_NO_WINDOW: roda oculto (sem aquela janela preta de cmd) e
+        # sobrevive ao encerramento do app (Windows não mata processos filhos).
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        subprocess.Popen(["cmd", "/c", str(bat)], creationflags=flags, close_fds=True)
+        log.info("Troca de arquivos agendada (aguardando o app fechar). Encerrando.")
         return True
     except Exception as e:
         log.warning("Falha ao aplicar atualização: %s", e)

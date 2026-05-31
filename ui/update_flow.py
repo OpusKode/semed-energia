@@ -130,6 +130,20 @@ def executar_fluxo_update() -> bool:
         if res is None or res.erro or not res.disponivel:
             return False
 
+        # 1b) Instalação em pasta protegida (Program Files)? O auto-update não
+        # consegue trocar os arquivos sem admin — evita o loop "baixa e não
+        # atualiza". Avisa para reinstalar e segue abrindo o app normalmente.
+        import sys as _sys
+        if getattr(_sys, "frozen", False) and not updater.instalacao_gravavel():
+            QMessageBox.information(
+                None, "Atualização disponível",
+                f"A versão {res.versao_remota} está disponível, mas este "
+                "programa está instalado em uma pasta protegida e não pode se "
+                "atualizar sozinho.\n\nPeça o instalador mais recente e "
+                "reinstale para atualizar.\n\nO programa será aberto normalmente.",
+            )
+            return False
+
         # 2) Perguntar ANTES de baixar (mostra o tamanho)
         box = QMessageBox()
         box.setIcon(QMessageBox.Question)
