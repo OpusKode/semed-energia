@@ -1,0 +1,43 @@
+#!/bin/sh
+# Valida a mensagem de commit no padrão Conventional Commits.
+# Habilite uma vez por clone:   git config core.hooksPath .githooks
+#
+# Formato aceito:  <tipo>(escopo opcional)(! opcional): <descrição>
+
+msg_file="$1"
+header=$(head -n1 "$msg_file")
+
+# Ignora commits automáticos (merge/revert/fixup/squash).
+case "$header" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*) exit 0 ;;
+esac
+
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9 ._/-]+\))?(!)?: .+'
+
+if printf '%s' "$header" | grep -Eq "$pattern"; then
+  len=$(printf '%s' "$header" | wc -c)
+  if [ "$len" -gt 72 ]; then
+    echo "Aviso: 1ª linha do commit tem $len caracteres (recomendado <= 72)."
+  fi
+  exit 0
+fi
+
+cat >&2 <<'EOF'
+
+  ✗ Mensagem de commit fora do padrão Conventional Commits.
+
+  Formato:  <tipo>(escopo opcional): <descrição no imperativo>
+
+  Tipos válidos:
+    feat  fix  docs  style  refactor  perf  test  build  ci  chore  revert
+
+  Exemplos:
+    feat(updater): baixar release via asset autenticado
+    fix(parser): corrigir bandeira no layout 2020
+    docs(readme): explicar fluxo de PR
+    feat(db)!: migrar de PostgreSQL para SQLite   ("!" = mudança incompatível)
+
+  Para corrigir a última mensagem:  git commit --amend
+
+EOF
+exit 1

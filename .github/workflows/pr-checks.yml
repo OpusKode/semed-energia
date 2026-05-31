@@ -1,0 +1,54 @@
+name: PR Checks
+
+# Verificações obrigatórias para todo Pull Request contra a main.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # Valida que o TÍTULO do PR segue Conventional Commits.
+  # (Usamos "Squash and merge", então o título vira o commit da main.)
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+
+  # Sanidade: compila todos os módulos e cria o schema SQLite + views.
+  # Não depende das fixtures (que são gitignoradas).
+  sanity:
+    name: sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Dependências mínimas
+        run: python -m pip install --upgrade pip sqlalchemy python-dotenv
+      - name: Compilar todos os módulos
+        run: python -m compileall -q .
+      - name: Criar schema SQLite + views (init_db)
+        run: |
+          python -c "import os, tempfile; os.environ['SEMED_DATA_DIR']=tempfile.mkdtemp(); \
+          from db.connection import init_db; init_db(); print('init_db OK (tabelas + views)')"

@@ -1,0 +1,3 @@
+# Ferramentas usadas apenas para gerar o executável (não vão para o app)
+-r requirements.txt
+pyinstaller>=6.6

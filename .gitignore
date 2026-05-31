@@ -1,0 +1,68 @@
+# ───────────────────────────────────────────────
+# SEMED Energia — arquivos que NÃO vão para o GitHub
+# ───────────────────────────────────────────────
+
+# Dados reais do cliente / acervo de faturas (NUNCA versionar)
+# OBS: dedup/ e export/ são PACOTES DE CÓDIGO (detector.py, powerbi.py,
+# raw.py) — NÃO podem ser ignorados. Saídas geradas dentro de export/ são
+# cobertas por "/export/*.csv" mais abaixo.
+FATURAS - SEMED/
+entrada/
+processados/
+duplicados/
+erros/
+snapshots/
+logs/
+
+# Fixtures de teste = cópias de faturas REAIS (não versionar, mesmo em repo privado).
+# Mantém só o README, que documenta os cenários e como recriá-las a partir de
+# FATURAS - SEMED/. Sem as fixtures, os testes de parsing não rodam num clone.
+tests/fixtures/*
+!tests/fixtures/README.md
+tests/golden/
+
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Segredos e configuração local
+.env
+update_token.txt
+# Config local do Claude Code (por máquina; não compartilhar)
+.claude/settings.local.json
+
+# Relatórios/saídas geradas (mantém fixtures/goldens de teste)
+scripts/relatorio_*.csv
+/export/*.csv
+
+# Artefatos de build (PyInstaller / instalador)
+build/
+dist/
+*.spec.bak
+installer/Output/
+*.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+pytest-cache-files-*/
+.venv/
+venv/
+env/
+
+# Scripts de verificação temporários
+verify_*.py
+_vu.py
+
+# IDE / SO
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
