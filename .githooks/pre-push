@@ -1,0 +1,33 @@
+#!/bin/sh
+# Bloqueia PUSH DIRETO para a branch 'main' — toda mudança deve entrar por PR.
+#
+# Proteção server-side (branch protection / rulesets) exige GitHub Pro em
+# repositório privado. Este hook supre isso LOCALMENTE. Habilite uma vez:
+#     git config core.hooksPath .githooks
+#
+# Merge de PR (Squash and merge pela interface) NÃO é afetado — ocorre no
+# servidor. Push de TAG (release vX.Y.Z) também é permitido.
+#
+# Emergência (sob sua responsabilidade):
+#     ALLOW_MAIN_PUSH=1 git push origin main
+
+[ "$ALLOW_MAIN_PUSH" = "1" ] && exit 0
+
+protected="refs/heads/main"
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "$protected" ]; then
+    cat >&2 <<'EOF'
+
+  ✗ Push direto para 'main' bloqueado. Use um Pull Request:
+
+      git checkout -b feat/minha-mudanca
+      git push -u origin feat/minha-mudanca
+      gh pr create --base main --fill
+
+  (Emergência, sob sua responsabilidade:  ALLOW_MAIN_PUSH=1 git push origin main)
+
+EOF
+    exit 1
+  fi
+done
+exit 0
