@@ -67,6 +67,21 @@ class HistoricoImportWorker(QThread):
         return self._cancel or self.isInterruptionRequested()
 
     def run(self):
+        # Desliga o GC automático nesta QThread: o coletor cíclico, ao disparar
+        # aqui, pode tocar objetos Qt/PySide e causar access violation durante a
+        # leitura de PDF. Coletamos de forma controlada entre lotes (estado
+        # limpo) para limitar a memória.
+        import gc
+        _gc_ativo = gc.isenabled()
+        gc.disable()
+        try:
+            self._executar()
+        finally:
+            if _gc_ativo:
+                gc.enable()
+
+    def _executar(self):
+        import gc
         root = Path(__file__).resolve().parent.parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
@@ -111,6 +126,10 @@ class HistoricoImportWorker(QThread):
                     self.log.emit("⏹ Importação cancelada.", "warn")
                     break
 
+                # Coleta no início de cada iteração (estado limpo: lote anterior
+                # já processado e pdfplumber fechado) — libera os ciclos do
+                # pdfminer sem o risco do GC automático disparar mid-parse.
+                gc.collect()
                 stats["lotes"] += 1
                 pdf = lote.pdf_logico
                 fontes = [str(a.caminho) for a in lote.arquivos_consumidos]
