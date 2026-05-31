@@ -21,7 +21,25 @@ from ui.main_window import MainWindow
 from ui.theme import STYLESHEET
 
 
-ASSETS = Path(__file__).resolve().parent / "assets"
+def _assets_dir() -> Path:
+    """
+    Pasta de assets, robusta em dev E no app empacotado (PyInstaller).
+
+    No exe, NÃO dá para usar Path(__file__) (vira caminho relativo resolvido
+    contra o diretório de trabalho — que num atalho do Menu Iniciar pode ser
+    qualquer um). Os datas do spec colocam os ícones em <bundle>/ui/assets/,
+    e o bundle fica em sys._MEIPASS.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", "")) or Path(sys.executable).parent
+        for cand in (base / "ui" / "assets", base / "assets", base):
+            if (cand / "icon.ico").exists() or (cand / "icon.png").exists():
+                return cand
+        return base / "ui" / "assets"
+    return Path(__file__).resolve().parent / "assets"
+
+
+ASSETS = _assets_dir()
 ICON_ICO = ASSETS / "icon.ico"
 ICON_PNG = ASSETS / "icon.png"
 
