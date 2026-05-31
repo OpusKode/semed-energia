@@ -139,13 +139,18 @@ def processar_pdf(pdf_path: Path, session, stats: Stats, logger,
                     destino = mover_com_rename(
                         pdf_path, PASTA_DUPLICADOS, dados_capa_dict, SUFIXO_DUP_HASH
                     )
-                registrar_arquivo(
-                    session, pdf_path.name, file_hash,
-                    resultado="duplicado_hash", tamanho_bytes=tamanho,
-                    documento=(dados_capa_dict or {}).get("documento"),
-                    nome_padronizado=destino.name if destino else None,
-                )
-                session.commit()
+                try:
+                    registrar_arquivo(
+                        session, pdf_path.name, file_hash,
+                        resultado="duplicado_hash", tamanho_bytes=tamanho,
+                        documento=(dados_capa_dict or {}).get("documento"),
+                        nome_padronizado=destino.name if destino else None,
+                    )
+                    session.commit()
+                except Exception:
+                    # Hash já registrado (ex.: reimport idempotente) — segue
+                    # contando como duplicata sem quebrar.
+                    session.rollback()
                 stats.duplicados_hash += 1
                 stats.linha(f"DUP-HASH: {pdf_path.name}")
                 return
@@ -173,13 +178,17 @@ def processar_pdf(pdf_path: Path, session, stats: Stats, logger,
                 destino = mover_com_rename(
                     pdf_path, PASTA_DUPLICADOS, dados_capa_dict, SUFIXO_DUP_DOC
                 )
-            registrar_arquivo(
-                session, pdf_path.name, file_hash,
-                resultado="duplicado_doc", tamanho_bytes=tamanho,
-                documento=dados_capa.documento,
-                nome_padronizado=destino.name if destino else None,
-            )
-            session.commit()
+            try:
+                registrar_arquivo(
+                    session, pdf_path.name, file_hash,
+                    resultado="duplicado_doc", tamanho_bytes=tamanho,
+                    documento=dados_capa.documento,
+                    nome_padronizado=destino.name if destino else None,
+                )
+                session.commit()
+            except Exception:
+                # Arquivo/hash já registrado (reimport idempotente) — segue.
+                session.rollback()
             stats.duplicados_doc += 1
             stats.linha(f"DUP-DOC: {pdf_path.name} ({dados_capa.documento})")
             return

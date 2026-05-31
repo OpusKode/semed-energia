@@ -156,6 +156,7 @@ class UploadPage(QWidget):
         self.setObjectName("Page")
         self.pdfs: list[Path] = []
         self.worker: ProcessadorWorker | None = None
+        self._hist_worker = None
         self._status_por_pdf: dict[str, str] = {}   # nome → status
         self._build()
 
@@ -205,9 +206,21 @@ class UploadPage(QWidget):
         self.btn_folder.setIcon(lucide_icon("layers", size=15))
         self.btn_folder.setIconSize(QSize(15, 15))
         self.btn_folder.setToolTip(
-            "Adiciona à fila todos os PDFs de uma pasta (incluindo subpastas)."
+            "Adiciona à fila todos os PDFs de uma pasta (incluindo subpastas).\n"
+            "Indicado para faturas no formato moderno (1 PDF = 1 agrupadora)."
         )
         self.btn_folder.clicked.connect(self._pick_folder)
+
+        self.btn_historico = QPushButton("  Importar acervo histórico…")
+        self.btn_historico.setIcon(lucide_icon("building-2", size=15))
+        self.btn_historico.setIconSize(QSize(15, 15))
+        self.btn_historico.setToolTip(
+            "Varre uma pasta no estilo 'FATURAS - SEMED' e importa TODO o acervo,\n"
+            "tratando os formatos antigos automaticamente (funde fragmentados,\n"
+            "divide consolidados, filtra pastas mistas). Idempotente: documentos\n"
+            "já importados são pulados."
+        )
+        self.btn_historico.clicked.connect(self._pick_historico)
 
         self.btn_clear = QPushButton("  Limpar")
         self.btn_clear.setIcon(lucide_icon("trash-2", size=15))
@@ -249,6 +262,7 @@ class UploadPage(QWidget):
 
         btn_row.addWidget(self.btn_select)
         btn_row.addWidget(self.btn_folder)
+        btn_row.addWidget(self.btn_historico)
         btn_row.addWidget(self.btn_clear)
         btn_row.addWidget(self.btn_reprocess)
         btn_row.addWidget(self.lbl_count)
@@ -455,6 +469,86 @@ class UploadPage(QWidget):
             "info",
         )
 
+    # ─── Acervo histórico (modo histórico, igual ao CLI) ─────
+
+    def _pick_historico(self):
+        """Importa um acervo inteiro (FATURAS - SEMED) com merge/split automático."""
+        from PySide6.QtWidgets import QMessageBox
+        if (self.worker and self.worker.isRunning()) or \
+           (self._hist_worker and self._hist_worker.isRunning()):
+            return
+        pasta = QFileDialog.getExistingDirectory(
+            self, "Selecione a pasta do acervo (ex.: FATURAS - SEMED)"
+        )
+        if not pasta:
+            return
+        resp = QMessageBox.question(
+            self, "Importar acervo histórico",
+            f"Importar TODO o acervo de:\n{pasta}\n\n"
+            "O sistema vai varrer as subpastas e tratar os formatos antigos "
+            "(fundir fragmentados, dividir consolidados, filtrar pastas mistas). "
+            "Documentos já importados são pulados (pode rodar de novo sem "
+            "duplicar). Pode levar alguns minutos.\n\nContinuar?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+        )
+        if resp == QMessageBox.Yes:
+            self._start_historico(Path(pasta))
+
+    def _start_historico(self, raiz: Path):
+        from ui.workers.historico_worker import HistoricoImportWorker
+
+        for b in (self.btn_process, self.btn_select, self.btn_folder,
+                  self.btn_historico, self.btn_clear, self.btn_reprocess):
+            b.setEnabled(False)
+        self.btn_cancel.setVisible(True)
+        self.btn_cancel.setEnabled(True)
+        self._result_row.setVisible(False)
+
+        self.log.clear()
+        self.progress.setRange(0, 0)          # indeterminado (total desconhecido)
+        self.progress.setValue(0)
+        self.progress.setVisible(True)
+        self.lbl_prog_detalhe.setText("Varrendo o acervo…")
+        self.lbl_prog_detalhe.setVisible(True)
+
+        self._hist_worker = HistoricoImportWorker(raiz)
+        self._hist_worker.log.connect(self._append_log)
+        self._hist_worker.progresso.connect(self._on_hist_prog)
+        self._hist_worker.concluido.connect(self._on_hist_done)
+        self._hist_worker.banco_atualizado.connect(self.bancoAtualizado.emit)
+        self._hist_worker.start()
+
+    def _on_hist_prog(self, n: int, texto: str):
+        self.lbl_prog_detalhe.setText(f"{n} lote(s) processado(s) — {texto}")
+
+    def _on_hist_done(self, stats: dict):
+        for b in (self.btn_process, self.btn_select, self.btn_folder,
+                  self.btn_historico, self.btn_clear):
+            b.setEnabled(True)
+        self.btn_reprocess.setEnabled(len(self.pdfs) > 0)
+        self.btn_cancel.setVisible(False)
+
+        QTimer.singleShot(1500, lambda: self.progress.setVisible(False))
+        QTimer.singleShot(1500, lambda: self.progress.setRange(0, len(self.pdfs) or 1))
+        QTimer.singleShot(1500, lambda: self.lbl_prog_detalhe.setVisible(False))
+
+        self.card_imp.set_value(stats.get("agrupadoras", 0))
+        self.card_fat.set_value(stats.get("faturas", 0))
+        self.card_dup.set_value(stats.get("duplicados", 0))
+        self.card_err.set_value(stats.get("erros", 0))
+        self._result_row.setVisible(True)
+
+        self._append_log("", "info")
+        self._append_log("═══ ACERVO HISTÓRICO — RESUMO ═══", "title")
+        self._append_log(
+            f"Lotes: {stats.get('lotes', 0)}  ·  "
+            f"Agrupadoras: {stats.get('agrupadoras', 0)}  ·  "
+            f"Faturas: {stats.get('faturas', 0)}  ·  "
+            f"Duplicados: {stats.get('duplicados', 0)}  ·  "
+            f"Erros: {stats.get('erros', 0)}",
+            "ok" if stats.get("agrupadoras") else "info",
+        )
+
     # ─── Processamento ───────────────────────────────────────
 
     def _start(self, reprocessar: bool = False):
@@ -470,6 +564,7 @@ class UploadPage(QWidget):
         self.btn_process.setEnabled(False)
         self.btn_select.setEnabled(False)
         self.btn_folder.setEnabled(False)
+        self.btn_historico.setEnabled(False)
         self.btn_clear.setEnabled(False)
         self.btn_reprocess.setEnabled(False)
         self.btn_cancel.setVisible(True)
@@ -517,16 +612,21 @@ class UploadPage(QWidget):
         self._start(reprocessar=True)
 
     def _cancel(self):
-        if self.worker and self.worker.isRunning():
+        w = (self._hist_worker
+             if (self._hist_worker and self._hist_worker.isRunning())
+             else self.worker)
+        if w and w.isRunning():
             self._append_log("⏹ Cancelamento solicitado…", "warn")
-            self.worker.cancelar()
+            w.cancelar()
             self.btn_cancel.setEnabled(False)
 
     def stop_worker_blocking(self, timeout_ms: int = 5000) -> bool:
-        if self.worker is None or not self.worker.isRunning():
-            return True
-        self.worker.cancelar()
-        return self.worker.wait(timeout_ms)
+        ok = True
+        for w in (self.worker, self._hist_worker):
+            if w is not None and w.isRunning():
+                w.cancelar()
+                ok = w.wait(timeout_ms) and ok
+        return ok
 
     # ─── Slots do worker ─────────────────────────────────────
 
@@ -572,6 +672,7 @@ class UploadPage(QWidget):
         self.btn_process.setEnabled(True)
         self.btn_select.setEnabled(True)
         self.btn_folder.setEnabled(True)
+        self.btn_historico.setEnabled(True)
         self.btn_clear.setEnabled(True)
         self.btn_reprocess.setEnabled(len(self.pdfs) > 0)
         self.btn_cancel.setVisible(False)
