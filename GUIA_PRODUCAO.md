@@ -28,6 +28,7 @@ Estas alterações já foram feitas para deixar o sistema pronto:
 - **`updater.py` + `update_config.py`**: o mecanismo de auto-atualização.
 - **`.gitignore`**: impede que dados reais e segredos (`.env`, faturas, banco) vão para o GitHub.
 - **`semed.spec`** (PyInstaller), **`installer/semed.iss`** (Inno Setup) e **`.github/workflows/release.yml`** (CI).
+- **Repositório `OpusKode/semed-energia` (privado)** já criado; a branch `main` é **protegida** (sem push direto — só por **Pull Request**) e os **commits são padronizados** (Conventional Commits, validados por hook local + CI `pr-checks.yml`). O passo a passo de como enviar uma alteração está em **"Contribuindo"** no `README.md`.
 
 > ⚠️ **Atenção aos dados atuais.** Hoje seus dados estão no PostgreSQL. Ao mudar para SQLite, o banco começa **vazio**. Para reconstituir o histórico, rode o reimport a partir das faturas:
 > `python scripts/reimport_historico.py` (ele lê a pasta `FATURAS - SEMED/`).
@@ -45,6 +46,8 @@ Estas alterações já foram feitas para deixar o sistema pronto:
 ---
 
 ## Parte 1 — Criar o repositório privado e subir o código
+
+> ✅ **Já feito nesta configuração:** o repositório `OpusKode/semed-energia` (privado) existe e a `main` já foi enviada. A partir daqui, **alterações entram por Pull Request** — `push` direto na `main` é bloqueado (ver Parte 4 e "Contribuindo" no `README.md`). Os passos abaixo ficam como referência para recriar do zero.
 
 1. No GitHub: **New repository** → nome `semed-energia` → **Private** → *Create* (não marque "Add README").
 2. No terminal, dentro da pasta do projeto:
@@ -66,10 +69,12 @@ Estas alterações já foram feitas para deixar o sistema pronto:
 
 ### 2.1 Apontar o app para o seu repositório
 
-Abra **`update_config.py`** e edite:
+> ✅ **Já configurado:** `update_config.py` aponta para `OpusKode / semed-energia`.
+
+O arquivo **`update_config.py`** define o destino:
 
 ```python
-GITHUB_OWNER = "SEU_USUARIO_OU_ORG"   # seu usuário/organização no GitHub
+GITHUB_OWNER = "OpusKode"      # usuário/organização no GitHub
 GITHUB_REPO  = "semed-energia"
 ```
 
@@ -108,45 +113,76 @@ Faça isto na sua máquina Windows (o cliente não precisa de nada disso).
 
    Resultado: `dist\SEMED Energia\SEMED Energia.exe` (com a pasta `_internal`).
 
-3. Coloque o token junto do executável (para os updates funcionarem no cliente).
-   Use o **Bloco de Notas** (Arquivo → Salvar como → `update_token.txt`, contendo
-   só o token) **ou** o PowerShell com codificação explícita:
+3. Coloque o token junto do executável (sem o token, o auto-update do repositório
+   **privado** não baixa). Com o token recém-copiado do GitHub (Parte 2.2),
+   leia-o do clipboard — assim ele não passa pelo terminal nem pelo histórico:
 
    ```powershell
-   "SEU_TOKEN_AQUI" | Out-File -Encoding utf8 "dist\SEMED Energia\update_token.txt"
+   Get-Clipboard | Set-Content -Path "dist\SEMED Energia\update_token.txt" -NoNewline -Encoding utf8
    ```
 
-   > Evite `echo token > arquivo` no PowerShell: ele grava em UTF-16 e pode
-   > corromper a leitura. O app lê o arquivo tolerando BOM (utf-8-sig).
+   Confira sem exibir o token (esperado: `True / True / ~90+`):
 
-4. Gere o instalador: abra **`installer\semed.iss`** no Inno Setup e clique **Compile** (F9).
-   Saída: `installer\Output\SEMED-Energia-Setup-1.0.0.exe`.
+   ```powershell
+   $t = (Get-Content "dist\SEMED Energia\update_token.txt" -Raw).Trim()
+   "existe=$([bool]$t)  prefixo_ok=$($t.StartsWith('github_pat_'))  tamanho=$($t.Length)"
+   ```
+
+   > Alternativa: **Bloco de Notas** → salvar como `update_token.txt` (UTF-8), só o token.
+   > Evite `echo token > arquivo` (grava em UTF-16 e corrompe a leitura). O app
+   > tolera BOM (lê com `utf-8-sig`). O `.gitignore` já ignora `update_token.txt`.
+
+4. Gere o instalador — pela interface (abra **`installer\semed.iss`** e **Compile** / F9)
+   **ou** por linha de comando:
+
+   ```powershell
+   & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" ".\installer\semed.iss"
+   ```
+
+   Saída: `installer\Output\SEMED-Energia-Setup-1.0.0.exe` (já com o token embutido).
 
 5. **Esse `Setup.exe` é o que você entrega ao cliente.** Ele instala, cria o atalho e pronto.
 
 > Teste antes de entregar: instale numa máquina/área limpa, abra, e confirme que o banco é criado em `%LOCALAPPDATA%\SEMED Energia\`.
+>
+> ⚠️ **Recompile o instalador sempre DEPOIS de colocar o token** — confira que o
+> `LastWriteTime` do `Setup.exe` é posterior ao do `update_token.txt`. O token
+> **sobrevive** a atualizações (o `robocopy` do updater não apaga arquivos ausentes no zip novo).
 
 ---
 
 ## Parte 4 — Publicar uma ATUALIZAÇÃO (toda vez que houver melhorias)
 
-Depois da primeira entrega, atualizar é simples e **automático**:
+A `main` é protegida: a mudança entra **por Pull Request** e só então você cria a tag. O resto é automático.
 
-1. Faça suas mudanças no código.
-2. **Suba o número da versão** em `version.py` (ex.: `1.0.0` → `1.0.1`).
-3. Faça commit e crie a **tag** correspondente (com `v` na frente):
+1. Faça as mudanças numa branch e **suba a versão** em `version.py` (ex.: `1.0.0` → `1.0.1`):
 
    ```bash
-   git add .
-   git commit -m "Correções e melhorias"
-   git tag v1.0.1
-   git push origin main --tags
+   git checkout main && git pull
+   git checkout -b chore/release-1.0.1
+   # edite version.py:  __version__ = "1.0.1"
+   git commit -am "chore(release): 1.0.1"
+   git push -u origin chore/release-1.0.1
+   gh pr create --base main --fill
    ```
 
-4. O **GitHub Actions** (workflow `release.yml`) builda sozinho, gera o `SEMED-Energia-windows.zip` e publica a **release** `v1.0.1`.
-5. Na próxima vez que **qualquer cliente** abrir o programa, ele detecta a versão nova, baixa, pergunta se quer atualizar, troca os arquivos e reinicia. ✅
+2. Os checks do PR (`pr-title` + `sanity`) ficam verdes → faça **Squash and merge** pela interface.
 
-> A tag **tem que bater** com `version.py` (o workflow falha de propósito se não bater, para evitar erro).
+3. Com a `main` atualizada, crie e empurre a **tag** (com `v` na frente):
+
+   ```bash
+   git checkout main && git pull
+   git tag v1.0.1
+   git push origin v1.0.1        # o hook libera tags; só bloqueia push direto na main
+   ```
+
+4. O **GitHub Actions** (`release.yml`) confere `tag == version.py`, builda o `.exe`, gera o `SEMED-Energia-windows.zip` e publica a **release** `v1.0.1`. Acompanhe com `gh run watch`.
+5. Na próxima vez que **qualquer cliente** abrir o programa, ele detecta a versão nova, baixa (autenticado com o token), pergunta se quer atualizar, troca os arquivos e reinicia. ✅
+
+> A tag **tem que bater** com `version.py` (o workflow falha de propósito se não bater).
+>
+> **1ª release:** pode ser direto `v1.0.0`, sem bump (o `version.py` já está em 1.0.0):
+> `git checkout main && git pull && git tag v1.0.0 && git push origin v1.0.0`.
 
 ---
 
@@ -181,4 +217,5 @@ Atualizações tocam **apenas** os arquivos do programa em `C:\Program Files\SEM
 - [ ] `pyinstaller semed.spec --noconfirm` rodou sem erro.
 - [ ] `update_token.txt` colocado em `dist\SEMED Energia\`.
 - [ ] Instalador compilado no Inno Setup e testado numa máquina limpa.
-- [ ] Para cada nova versão: subir `version.py`, commit, `git tag vX.Y.Z`, push.
+- [ ] Hooks locais ativos: `git config core.hooksPath .githooks` (commit-msg + pre-push).
+- [ ] Para cada nova versão: bump de `version.py` **via PR** → merge → `git tag vX.Y.Z` → `git push origin vX.Y.Z`.
