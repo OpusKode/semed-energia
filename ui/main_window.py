@@ -307,11 +307,19 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, ev)
 
     def _on_item_processado(self, item: dict):
-        """Distribui o item para as outras paginas."""
-        self.agrupadoras_page.adicionar_item(item)
-        self.unidade_page.adicionar_item(item)
-        self.dashboard_page.adicionar_item(item)
-        self.validacao_page.adicionar_item(item)
+        """Distribui o item para as outras paginas.
+
+        Cada página é atualizada isoladamente: se uma falhar com algum item,
+        registramos e seguimos — uma falha de exibição não pode derrubar o
+        app durante a importação.
+        """
+        import traceback
+        for pagina in (self.agrupadoras_page, self.unidade_page,
+                       self.dashboard_page, self.validacao_page):
+            try:
+                pagina.adicionar_item(item)
+            except Exception:
+                traceback.print_exc()
 
     def _abrir_detalhe(self, fatura: dict, capa: dict, origem_idx: int = 1):
         """Exibe a pagina de detalhe para a fatura selecionada.

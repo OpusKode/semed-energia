@@ -9,7 +9,7 @@ Pipeline por PDF (igual ao main.py):
     5. Parser B3 e A4
     6. Nota fiscal por fatura                      (Camada 3 de dedup)
     7. Validacao de integridade
-    8. Persistencia transacional no PostgreSQL
+    8. Persistencia transacional no SQLite
     9. Registra arquivo_processado
 
 Se o banco nao estiver disponivel, cai em modo dry-run automaticamente e
@@ -131,13 +131,31 @@ class ProcessadorWorker(QThread):
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
 
-        from utils.file_manager import calcular_hash_sha256
-        from parser.classifier import classificar_pdf
-        from parser.capa_parser import parsear_capa
-        from parser.detalhe_parser import parsear_pagina_b3, parsear_pagina_a4
-        from validator.integrity import validar_tudo
-        import fitz  # PyMuPDF — abrimos 1x e reutilizamos
-        import pdfplumber
+        # Imports protegidos: se um componente nativo (ex.: PyMuPDF/`fitz`,
+        # que depende do runtime do Visual C++) falhar ao carregar na máquina
+        # do cliente, NÃO deixamos a exceção subir na QThread — isso derrubaria
+        # o app inteiro. Em vez disso, logamos e encerramos limpo.
+        try:
+            from utils.file_manager import calcular_hash_sha256
+            from parser.classifier import classificar_pdf
+            from parser.capa_parser import parsear_capa
+            from parser.detalhe_parser import parsear_pagina_b3, parsear_pagina_a4
+            from validator.integrity import validar_tudo
+            import fitz  # PyMuPDF — abrimos 1x e reutilizamos
+            import pdfplumber
+        except Exception as e:
+            traceback.print_exc()
+            self.log.emit(
+                f"✗ Falha ao carregar os componentes de leitura de PDF: {e}. "
+                f"No cliente, instale o 'Microsoft Visual C++ Redistributable (x64)'.",
+                "error",
+            )
+            self.concluido.emit({
+                "importados": 0, "duplicados_hash": 0, "duplicados_doc": 0,
+                "duplicados_nf": 0, "erros": len(self.pdfs), "faturas_total": 0,
+                "warnings": 0, "persistido": False,
+            })
+            return
 
         # Tentar conectar no banco
         session = None
@@ -409,7 +427,10 @@ class ProcessadorWorker(QThread):
                         session.rollback()
 
         if session is not None:
-            session.close()
+            try:
+                session.close()
+            except Exception:
+                pass
 
         stats["persistido"] = houve_commit
         if houve_commit:

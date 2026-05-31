@@ -196,6 +196,15 @@ A `main` é protegida: a mudança entra **por Pull Request** e só então você 
 
 ---
 
+## Solução de problemas
+
+- **O app fechava sozinho ao importar uma fatura.** A partir desta versão isso não deve mais acontecer: erros inesperados na tela viram um aviso (e o programa continua aberto), e qualquer falha é gravada em
+  `%LOCALAPPDATA%\SEMED Energia\logs\erros_ui.log`. Abra esse arquivo (ou peça ao cliente) para ver a causa exata.
+  - Se o log mencionar falha ao carregar `fitz` / `_mupdf` / `DLL load failed`, instale na máquina o **Microsoft Visual C++ Redistributable (x64)**: <https://aka.ms/vs/17/release/vc_redist.x64.exe>
+- **Importar uma pasta inteira:** na tela *Processar faturas*, use **Importar pasta…** para enfileirar de uma vez todos os PDFs de uma pasta (incluindo subpastas).
+
+---
+
 ## Onde ficam os dados do cliente
 
 ```

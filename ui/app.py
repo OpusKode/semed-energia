@@ -35,6 +35,47 @@ def _melhor_icone() -> QIcon | None:
     return None
 
 
+def _instalar_tratador_global_de_erros() -> None:
+    """
+    Converte exceções não tratadas na thread da UI num diálogo + log, em vez
+    de o programa fechar silenciosamente. Erros dentro dos workers (QThreads)
+    já são tratados nos próprios workers; este hook cobre a thread principal e
+    serve de rede de segurança/diagnóstico no cliente.
+    """
+    import traceback
+    from datetime import datetime
+
+    def _hook(exc_type, exc, tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc, tb)
+            return
+        texto = "".join(traceback.format_exception(exc_type, exc, tb))
+        sys.stderr.write(texto)
+        arq = None
+        try:
+            from config import PASTA_LOGS
+            PASTA_LOGS.mkdir(parents=True, exist_ok=True)
+            arq = PASTA_LOGS / "erros_ui.log"
+            with open(arq, "a", encoding="utf-8") as f:
+                f.write(f"\n===== {datetime.now():%Y-%m-%d %H:%M:%S} =====\n{texto}\n")
+        except Exception:
+            pass
+        try:
+            from PySide6.QtWidgets import QMessageBox
+            box = QMessageBox()
+            box.setIcon(QMessageBox.Critical)
+            box.setWindowTitle("Erro inesperado")
+            box.setText("Ocorreu um erro inesperado, mas o programa continua aberto.")
+            if arq:
+                box.setInformativeText(f"Detalhes técnicos salvos em:\n{arq}")
+            box.setDetailedText(texto[-4000:])
+            box.exec()
+        except Exception:
+            pass
+
+    sys.excepthook = _hook
+
+
 def _checar_atualizacao() -> bool:
     """
     Verifica/baixa atualização no GitHub. Se houver, pergunta ao usuário e,
@@ -69,6 +110,10 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("SEMED Energia")
     app.setOrganizationName("Prefeitura de Ananindeua")
+
+    # Rede de segurança: erros inesperados na UI viram diálogo + log,
+    # nunca um fechamento silencioso.
+    _instalar_tratador_global_de_erros()
 
     # No Windows, define AppUserModelID — necessario para que o icone
     # aparecer corretamente na barra de tarefas (sem agrupar com python.exe).

@@ -201,6 +201,14 @@ class UploadPage(QWidget):
         self.btn_select.setIconSize(QSize(15, 15))
         self.btn_select.clicked.connect(self._pick_files)
 
+        self.btn_folder = QPushButton("  Importar pasta…")
+        self.btn_folder.setIcon(lucide_icon("layers", size=15))
+        self.btn_folder.setIconSize(QSize(15, 15))
+        self.btn_folder.setToolTip(
+            "Adiciona à fila todos os PDFs de uma pasta (incluindo subpastas)."
+        )
+        self.btn_folder.clicked.connect(self._pick_folder)
+
         self.btn_clear = QPushButton("  Limpar")
         self.btn_clear.setIcon(lucide_icon("trash-2", size=15))
         self.btn_clear.setIconSize(QSize(15, 15))
@@ -240,6 +248,7 @@ class UploadPage(QWidget):
         self.lbl_count.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px;")
 
         btn_row.addWidget(self.btn_select)
+        btn_row.addWidget(self.btn_folder)
         btn_row.addWidget(self.btn_clear)
         btn_row.addWidget(self.btn_reprocess)
         btn_row.addWidget(self.lbl_count)
@@ -423,6 +432,29 @@ class UploadPage(QWidget):
         if files:
             self._add_files([Path(f) for f in files])
 
+    def _pick_folder(self):
+        """Adiciona à fila todos os PDFs de uma pasta (recursivo)."""
+        pasta = QFileDialog.getExistingDirectory(
+            self, "Selecione a pasta com PDFs de fatura"
+        )
+        if not pasta:
+            return
+        pdfs = sorted(
+            p for p in Path(pasta).rglob("*")
+            if p.is_file() and p.suffix.lower() == ".pdf"
+        )
+        if not pdfs:
+            self._append_log(f"Nenhum PDF encontrado em: {pasta}", "warn")
+            return
+        antes = len(self.pdfs)
+        self._add_files(pdfs)
+        novos = len(self.pdfs) - antes
+        self._append_log(
+            f"+ {novos} PDF(s) adicionados de {pasta}"
+            + (f"  ({len(pdfs) - novos} já na fila)" if novos < len(pdfs) else ""),
+            "info",
+        )
+
     # ─── Processamento ───────────────────────────────────────
 
     def _start(self, reprocessar: bool = False):
@@ -437,6 +469,7 @@ class UploadPage(QWidget):
 
         self.btn_process.setEnabled(False)
         self.btn_select.setEnabled(False)
+        self.btn_folder.setEnabled(False)
         self.btn_clear.setEnabled(False)
         self.btn_reprocess.setEnabled(False)
         self.btn_cancel.setVisible(True)
@@ -538,6 +571,7 @@ class UploadPage(QWidget):
         # Restaura botões
         self.btn_process.setEnabled(True)
         self.btn_select.setEnabled(True)
+        self.btn_folder.setEnabled(True)
         self.btn_clear.setEnabled(True)
         self.btn_reprocess.setEnabled(len(self.pdfs) > 0)
         self.btn_cancel.setVisible(False)
