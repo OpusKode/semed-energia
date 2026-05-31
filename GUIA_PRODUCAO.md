@@ -204,7 +204,11 @@ A `main` é protegida: a mudança entra **por Pull Request** e só então você 
 - **Importar pelo app — duas opções na tela *Processar faturas*:**
   - **Importar pasta…** → enfileira todos os PDFs de uma pasta (e subpastas) e processa cada um. Ideal para faturas no **formato moderno** (1 PDF = 1 agrupadora, 2023+).
   - **Importar acervo histórico…** → varre uma pasta no estilo `FATURAS - SEMED` e importa **todo o acervo**, tratando os **formatos antigos** automaticamente (funde fragmentados, divide consolidados, filtra pastas mistas). É **idempotente** (documentos já importados são pulados). Equivale ao `--modo historico` do CLI, com janela de progresso.
-- **Ao abrir, o app fica "parado" usando rede e não atualiza.** Era o auto-update baixando o pacote (~100 MB) em silêncio. Corrigido: agora aparece **"Verificando atualizações…"**, uma pergunta com o tamanho do download e uma **barra de progresso** (com *Cancelar*). ⚠️ Uma versão **antiga já instalada** no cliente ainda usa o updater silencioso para a *primeira* atualização — se ele parecer travado, basta **aguardar** (está baixando) ou **reinstalar** com o `Setup.exe` novo (que já traz o updater com progresso).
+- **Ao abrir, o app fica "parado" usando rede e não atualiza.** Era o auto-update baixando o pacote (~100 MB) em silêncio. Corrigido: agora aparece **"Verificando atualizações…"**, uma pergunta com o tamanho do download e uma **barra de progresso** (com *Cancelar*).
+- **Auto-update baixa mas não instala (entra em loop).** Causa: o app estava instalado em `C:\Program Files`, e a troca de arquivos exige **admin** → o `robocopy` falhava e o app reabria na versão antiga, repetindo o ciclo. **Corrigido em duas frentes:**
+  1. O instalador agora é **por-usuário** — vai para `%LOCALAPPDATA%\Programs\SEMED Energia` (sem admin), então o update se aplica sozinho.
+  2. Se o app detectar que está numa pasta protegida (instalação antiga em Program Files), ele **avisa para reinstalar** em vez de entrar em loop.
+  > ⚠️ Um cliente que instalou a versão antiga (em Program Files) precisa **reinstalar uma vez** com o novo instalador por-usuário. A partir daí, atualiza sozinho.
 
 ---
 
