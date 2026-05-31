@@ -177,7 +177,9 @@ pytest tests/test_smoke.py --update-golden  # atualiza goldens após mudanças i
 
 ## Contribuindo — como enviar uma alteração
 
-A branch `main` é **protegida**: ninguém dá `push` direto nela. Toda mudança entra por **Pull Request (PR)** e só é mesclada depois de passar nas verificações automáticas.
+A branch `main` é **protegida**: ninguém dá `push` direto nela — toda mudança entra por **Pull Request (PR)**.
+
+> **Como a proteção é aplicada:** a proteção *server-side* do GitHub (branch protection / rulesets) exige **GitHub Pro** em repositório privado. Enquanto o repo estiver no plano Free, a regra "sem push direto na `main`" é garantida **localmente** pelo hook `.githooks/pre-push` (habilite-o — passo abaixo). No servidor, o repositório já está em **Squash and merge** apenas. Migrando para Pro/Team, dá para ligar a proteção server-side em segundos (ver o fim desta seção).
 
 ### 1. Crie uma branch a partir da `main`
 
@@ -215,13 +217,15 @@ docs(readme): explicar fluxo de PR
 feat(db)!: migrar de PostgreSQL para SQLite      # "!" sinaliza mudança incompatível
 ```
 
-**Ative a validação local de mensagens (uma vez por clone):**
+**Ative os hooks locais (uma vez por clone):**
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-A partir daí, um commit fora do padrão é **recusado** com uma mensagem de ajuda (hook `.githooks/commit-msg`).
+Isso liga dois hooks:
+- `commit-msg` — recusa commits fora do padrão Conventional Commits.
+- `pre-push` — recusa `push` direto na `main` (emergência: `ALLOW_MAIN_PUSH=1 git push origin main`).
 
 ### 3. Abra o Pull Request
 
@@ -250,3 +254,23 @@ git push origin v1.0.1
 ```
 
 O workflow `release.yml` builda o `.exe`, gera o `SEMED-Energia-windows.zip` e publica a release — que os clientes baixam no próximo arranque. **A tag tem que bater com `version.py`** (o workflow falha de propósito se divergir).
+
+### Proteção server-side (opcional — requer GitHub Pro/Team)
+
+Em repositório **privado**, branch protection e rulesets exigem plano pago. Após o upgrade, ligue a proteção (PR obrigatório, sem push direto nem para admins, checks obrigatórios) com:
+
+```bash
+gh api -X PUT repos/OpusKode/semed-energia/branches/main/protection --input - <<'JSON'
+{
+  "required_status_checks": { "strict": true, "contexts": ["pr-title", "sanity"] },
+  "enforce_admins": true,
+  "required_pull_request_reviews": { "required_approving_review_count": 0 },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_linear_history": true
+}
+JSON
+```
+
+A partir daí o GitHub passa a recusar pushes diretos no servidor e a exigir que os checks `pr-title` e `sanity` fiquem verdes antes do merge — tornando o hook `pre-push` redundante (mas inofensivo).
