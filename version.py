@@ -7,4 +7,4 @@ para decidir se há atualização disponível. Use versionamento semântico
 (ex.: versão 1.0.0  ->  tag v1.0.0).
 """
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
