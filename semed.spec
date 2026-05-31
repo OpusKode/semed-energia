@@ -9,9 +9,45 @@ Saída:
     dist/SEMED Energia/SEMED Energia.exe   (+ pasta _internal)
 É essa pasta inteira que vira o instalador e o pacote de atualização.
 """
+import os
+import re
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.win32.versioninfo import (
+    VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable, StringStruct,
+    VarFileInfo, VarStruct,
+)
 
 block_cipher = None
+
+# --- Versão do .exe (fonte única: version.py) -------------------------
+# Embute o recurso de versão do Windows no executável (Propriedades > Detalhes).
+# O instalador (installer/semed.iss) lê essa mesma versão do .exe gerado.
+_ver_txt = re.search(
+    r'__version__\s*=\s*["\']([^"\']+)["\']',
+    open(os.path.join(SPECPATH, "version.py"), encoding="utf-8").read(),
+).group(1)
+_nums = [int(p) for p in _ver_txt.split(".") if p.isdigit()][:4]
+while len(_nums) < 4:
+    _nums.append(0)
+_filevers = tuple(_nums)
+
+version_info = VSVersionInfo(
+    ffi=FixedFileInfo(filevers=_filevers, prodvers=_filevers, mask=0x3F,
+                      flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+    kids=[
+        StringFileInfo([StringTable("040904B0", [
+            StringStruct("CompanyName", "Prefeitura de Ananindeua - SEMED"),
+            StringStruct("FileDescription", "SEMED Energia"),
+            StringStruct("FileVersion", _ver_txt),
+            StringStruct("InternalName", "SEMED Energia"),
+            StringStruct("OriginalFilename", "SEMED Energia.exe"),
+            StringStruct("ProductName", "SEMED Energia"),
+            StringStruct("ProductVersion", _ver_txt),
+            StringStruct("LegalCopyright", "Prefeitura de Ananindeua"),
+        ])]),
+        VarFileInfo([VarStruct("Translation", [0x0409, 0x04B0])]),
+    ],
+)
 
 datas = [
     ("ui/assets/icon.ico", "ui/assets"),
@@ -68,6 +104,7 @@ exe = EXE(
     upx=False,
     console=False,                 # app de janela, sem console
     icon="ui/assets/icon.ico",
+    version=version_info,          # recurso de versão (Propriedades do .exe)
 )
 
 coll = COLLECT(

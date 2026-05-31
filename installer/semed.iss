@@ -11,9 +11,18 @@
 
 #define AppName "SEMED Energia"
 #define AppPublisher "Prefeitura de Ananindeua - SEMED"
-; A versão é lida da pasta de build; ajuste a cada release.
-#define AppVersion "1.0.0"
 #define AppExe "SEMED Energia.exe"
+
+; Versão lida AUTOMATICAMENTE do .exe gerado (fonte única: version.py -> semed.spec).
+; Requer ter rodado 'pyinstaller semed.spec --noconfirm' ANTES de compilar aqui.
+#define SourceExe "..\\dist\\SEMED Energia\\SEMED Energia.exe"
+#define AppVersion GetStringFileInfo(SourceExe, "ProductVersion")
+#if AppVersion == ""
+  #define AppVersion GetVersionNumbersString(SourceExe)
+#endif
+#if AppVersion == ""
+  #error Versao do executavel nao encontrada. Rode 'pyinstaller semed.spec --noconfirm' antes de compilar o instalador.
+#endif
 
 [Setup]
 ; AppId identifica o programa para upgrades. NÃO mude depois de publicado.

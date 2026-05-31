@@ -25,6 +25,11 @@ from ui.pages.unidade_page import UnidadePage
 from ui.workers.db_loader import DbLoaderWorker
 from ui.workers.export_worker import ExportPowerBIWorker, ExportRawWorker
 
+try:
+    from version import __version__ as APP_VERSION
+except Exception:
+    APP_VERSION = ""
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -108,7 +113,7 @@ class MainWindow(QMainWindow):
         titulo.setObjectName("SidebarTitle")
         titulo.setAlignment(Qt.AlignCenter)
         titulo.setStyleSheet("padding: 0;")
-        sub = QLabel("Equatorial Pará · v1")
+        sub = QLabel(f"Equatorial Pará · v{APP_VERSION}" if APP_VERSION else "Equatorial Pará")
         sub.setObjectName("SidebarSubtitle")
         sub.setAlignment(Qt.AlignCenter)
         sub.setStyleSheet("padding: 0 0 6px 0;")
