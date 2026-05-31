@@ -127,6 +127,23 @@ class ProcessadorWorker(QThread):
     # ----------------------------------------------------
 
     def run(self):
+        # O coletor de lixo cíclico do Python, ao disparar DENTRO desta QThread,
+        # pode tocar/finalizar objetos Qt/PySide (que têm afinidade de thread) e
+        # causar "access violation" durante a leitura de PDF (crash sem log no
+        # app empacotado). Desligamos o GC automático durante o processamento —
+        # o refcounting continua liberando a maior parte da memória — e
+        # reabilitamos ao final.
+        import gc
+        _gc_ativo = gc.isenabled()
+        gc.disable()
+        try:
+            self._executar()
+        finally:
+            if _gc_ativo:
+                gc.enable()
+
+    def _executar(self):
+        import gc
         root = Path(__file__).resolve().parent.parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
@@ -192,6 +209,9 @@ class ProcessadorWorker(QThread):
             if self._deve_cancelar():
                 self.log.emit(f"⏹ Cancelado antes de {pdf.name}", "warn")
                 break
+            # Coleta de lixo controlada entre PDFs (estado limpo) — limita a
+            # memória em pastas grandes sem o GC automático disparar mid-parse.
+            gc.collect()
             self.progresso.emit(i, len(self.pdfs))
             self.log.emit(f"── {pdf.name} ──", "title")
 
