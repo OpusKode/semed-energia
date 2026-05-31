@@ -1,12 +1,14 @@
 """
 Auto-atualização via GitHub Releases (repositório privado).
 
-Fluxo (chamado na inicialização do app):
-    1. Consulta a release mais recente na API do GitHub.
-    2. Compara a tag (vX.Y.Z) com a versão local (version.__version__).
-    3. Se houver versão nova: baixa o .zip anexado à release.
-    4. Extrai para uma pasta de staging.
-    5. Gera um .bat que, após o app fechar, troca os arquivos e reinicia.
+Fluxo (chamado na inicialização do app, com janela de progresso):
+    1. verificar(): consulta a release mais recente e compara a tag (vX.Y.Z)
+       com a versão local. NÃO baixa nada — só diz se há atualização e o tamanho.
+    2. (UI) pergunta ao usuário se deseja atualizar.
+    3. baixar(res, on_progress, cancelado): baixa o .zip com callback de progresso
+       (para a barra) e suporte a cancelamento.
+    4. aplicar_e_reiniciar(): extrai para staging e dispara um .bat que, após o
+       app fechar, troca os arquivos e reinicia.
 
 Princípio: NUNCA bloquear o uso do app. Qualquer falha (sem internet,
 sem token, erro de rede) é registrada e o app abre normalmente.
@@ -37,8 +39,14 @@ class ResultadoUpdate:
     disponivel: bool = False
     versao_local: str = VERSAO_LOCAL
     versao_remota: str | None = None
-    zip_baixado: Path | None = None
+    asset: dict | None = None        # metadados do .zip na release
+    tamanho: int = 0                 # tamanho do .zip em bytes (para a barra)
+    zip_baixado: Path | None = None  # preenchido por baixar()
     erro: str | None = None
+
+
+class _Cancelado(Exception):
+    """Sinaliza cancelamento do download pelo usuário."""
 
 
 # ─── Comparação de versões ──────────────────────────────────
@@ -92,22 +100,39 @@ def _encontrar_asset(release: dict) -> dict | None:
     return None
 
 
-def _baixar_asset(asset: dict, destino: Path) -> Path:
+def _baixar_asset(asset: dict, destino: Path, on_progress=None, cancelado=None) -> Path:
+    """
+    Baixa o asset em streaming.
+
+    :param on_progress: callable(bytes_baixados:int, bytes_total:int) — chamado a
+                        cada bloco; total=0 se desconhecido.
+    :param cancelado:   callable() -> bool — se retornar True, aborta (levanta _Cancelado).
+    """
     import requests
     url = f"{API}/repos/{cfg.GITHUB_OWNER}/{cfg.GITHUB_REPO}/releases/assets/{asset['id']}"
+    total = int(asset.get("size") or 0)
+    baixado = 0
     with requests.get(url, headers=_headers(octet=True), stream=True,
                       timeout=TIMEOUT, allow_redirects=True) as r:
         r.raise_for_status()
+        total = int(r.headers.get("Content-Length") or total)
+        if on_progress:
+            on_progress(0, total)
         with open(destino, "wb") as f:
             for chunk in r.iter_content(chunk_size=1 << 16):
+                if cancelado is not None and cancelado():
+                    raise _Cancelado()
                 if chunk:
                     f.write(chunk)
+                    baixado += len(chunk)
+                    if on_progress:
+                        on_progress(baixado, total)
     return destino
 
 
-# ─── Verificação (sem aplicar) ──────────────────────────────
+# ─── Verificação (sem baixar) ───────────────────────────────
 def verificar() -> ResultadoUpdate:
-    """Checa e baixa (mas não aplica) a atualização, se houver."""
+    """Checa se há versão mais recente. NÃO baixa nada (ver baixar())."""
     res = ResultadoUpdate()
     try:
         release = obter_release_mais_recente()
@@ -123,17 +148,39 @@ def verificar() -> ResultadoUpdate:
             res.erro = "Release sem pacote .zip anexado."
             log.warning(res.erro)
             return res
-        tmp = Path(tempfile.mkdtemp(prefix="semed_update_"))
-        zip_path = tmp / asset["name"]
-        log.info("Baixando atualização %s...", tag)
-        _baixar_asset(asset, zip_path)
-        res.zip_baixado = zip_path
+        res.asset = asset
+        res.tamanho = int(asset.get("size") or 0)
         res.disponivel = True
-        log.info("Atualização %s baixada em %s", tag, zip_path)
+        log.info("Atualização %s disponível (%d bytes).", tag, res.tamanho)
     except Exception as e:
         res.erro = str(e)
         log.warning("Falha ao verificar atualização: %s", e)
     return res
+
+
+# ─── Download (com progresso) ───────────────────────────────
+def baixar(res: ResultadoUpdate, on_progress=None, cancelado=None) -> Path | None:
+    """
+    Baixa o asset da release já verificada (res.asset). Retorna o caminho do
+    .zip, ou None se cancelado/erro (registrando res.erro). Nunca propaga.
+    """
+    if not res or not res.asset:
+        return None
+    try:
+        tmp = Path(tempfile.mkdtemp(prefix="semed_update_"))
+        zip_path = tmp / res.asset["name"]
+        log.info("Baixando atualização %s...", res.versao_remota)
+        _baixar_asset(res.asset, zip_path, on_progress=on_progress, cancelado=cancelado)
+        res.zip_baixado = zip_path
+        log.info("Atualização baixada em %s", zip_path)
+        return zip_path
+    except _Cancelado:
+        log.info("Download cancelado pelo usuário.")
+        return None
+    except Exception as e:
+        res.erro = str(e)
+        log.warning("Falha ao baixar atualização: %s", e)
+        return None
 
 
 # ─── Aplicação (somente quando empacotado) ──────────────────

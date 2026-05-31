@@ -202,6 +202,7 @@ A `main` é protegida: a mudança entra **por Pull Request** e só então você 
   `%LOCALAPPDATA%\SEMED Energia\logs\erros_ui.log`. Abra esse arquivo (ou peça ao cliente) para ver a causa exata.
   - Se o log mencionar falha ao carregar `fitz` / `_mupdf` / `DLL load failed`, instale na máquina o **Microsoft Visual C++ Redistributable (x64)**: <https://aka.ms/vs/17/release/vc_redist.x64.exe>
 - **Importar uma pasta inteira:** na tela *Processar faturas*, use **Importar pasta…** para enfileirar de uma vez todos os PDFs de uma pasta (incluindo subpastas).
+- **Ao abrir, o app fica "parado" usando rede e não atualiza.** Era o auto-update baixando o pacote (~100 MB) em silêncio. Corrigido: agora aparece **"Verificando atualizações…"**, uma pergunta com o tamanho do download e uma **barra de progresso** (com *Cancelar*). ⚠️ Uma versão **antiga já instalada** no cliente ainda usa o updater silencioso para a *primeira* atualização — se ele parecer travado, basta **aguardar** (está baixando) ou **reinstalar** com o `Setup.exe` novo (que já traz o updater com progresso).
 
 ---
 

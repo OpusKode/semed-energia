@@ -78,30 +78,20 @@ def _instalar_tratador_global_de_erros() -> None:
 
 def _checar_atualizacao() -> bool:
     """
-    Verifica/baixa atualização no GitHub. Se houver, pergunta ao usuário e,
-    se aceito, aplica e sinaliza que o app deve encerrar (retorna True).
+    Executa o fluxo de auto-atualização COM janela de progresso
+    (ui.update_flow): verifica → pergunta → baixa com barra → instala/reinicia.
+    Retorna True se uma atualização foi aplicada (o app deve encerrar).
+
+    Só roda no app empacotado; em desenvolvimento é pulado para não atrapalhar
+    (defina SEMED_FORCE_UPDATE_CHECK=1 para forçar o teste do fluxo em dev).
     Nunca propaga exceções: falha de rede não impede o uso do app.
     """
+    import os
+    if not getattr(sys, "frozen", False) and not os.getenv("SEMED_FORCE_UPDATE_CHECK"):
+        return False
     try:
-        from PySide6.QtWidgets import QMessageBox
-        import updater
-
-        res = updater.verificar()
-        if not res.disponivel or not res.zip_baixado:
-            return False
-
-        resp = QMessageBox.question(
-            None,
-            "Atualização disponível",
-            f"Uma nova versão ({res.versao_remota}) está disponível.\n"
-            f"Versão atual: {res.versao_local}.\n\n"
-            "Deseja atualizar agora? O programa será reiniciado.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
-        )
-        if resp != QMessageBox.Yes:
-            return False
-        return updater.aplicar_e_reiniciar(res.zip_baixado)
+        from ui.update_flow import executar_fluxo_update
+        return executar_fluxo_update()
     except Exception:
         return False
 
